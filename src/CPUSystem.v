@@ -1,24 +1,22 @@
 `timescale 1ns / 1ps
 
-// Top-level CPU controller — orchestrates instruction fetch, decode, and execute
 module CPUSystem(
     input wire Clock,
     input wire Reset,
     output reg [11:0] T
 );
 
-    // Instruction field extraction wires
+
     wire [5:0] Opcode;
     wire [1:0] RegSel;
     wire [7:0] Address;
     wire [2:0] DestReg, SrcReg1, SrcReg2;
 
-    // Control registers for the Register File
     reg [2:0] RF_OutASel, RF_OutBSel;
     reg [1:0] RF_FunSel;
     reg [3:0] RF_RegSel, RF_ScrSel;
 
-    // ALU control
+
     reg [3:0] ALU_FunSel;
     reg       ALU_WF;
 
@@ -75,10 +73,6 @@ module CPUSystem(
     reg T_Reset;        // resets the timing counter back to T0
     reg cond_branch;      // evaluated branch condition
 
-    // ----------------------------------------------------------------
-    //  Helper: translate a 2-bit register index into a one-hot-low
-    //          enable mask for the general-purpose register file
-    // ----------------------------------------------------------------
     function [3:0] rf_enable_mask;
         input [1:0] idx;
         begin
@@ -91,10 +85,6 @@ module CPUSystem(
         end
     endfunction
 
-    // ----------------------------------------------------------------
-    //  Helper: translate a 2-bit register index into a one-hot-low
-    //          enable mask for the address register file
-    // ----------------------------------------------------------------
     function [2:0] arf_enable_mask;
         input [1:0] idx;
         begin
@@ -395,19 +385,19 @@ module CPUSystem(
                 end
 
             // ------- CALL (0x1A) --------
-            // T[2]: PC → RF[RegSel] (save return address)
-            // T[3]: write HIGH byte at M[SP], SP--
-            // T[4]: write LOW  byte at M[SP], SP--
+            // T[2]: PC → S1 (save return address to scratch, NOT user register)
+            // T[3]: write HIGH byte of S1 at M[SP], SP--
+            // T[4]: write LOW  byte of S1 at M[SP], SP--
             // T[5]: PC ← Address field, T_Reset
             end else if (Opcode == 6'h1A) begin
                 if (T[2]) begin
                     MuxASel     = 2'b01;
                     ARF_OutCSel = 2'b00;               // PC
-                    RF_RegSel   = rf_enable_mask(RegSel); // save return address
+                    RF_ScrSel   = 4'b0111;             // S1 enabled
                     RF_FunSel   = 2'b01;
                 end else if (T[3]) begin
                     // Write HIGH byte at M[SP], SP--
-                    RF_OutASel  = {1'b0, RegSel};
+                    RF_OutASel  = 3'b100;              // S1
                     ALU_FunSel  = 4'b0000; // MOV
                     MuxCSel     = 1'b1;    // high byte
                     ARF_OutDSel = 1'b1;    // SP as address
@@ -417,7 +407,7 @@ module CPUSystem(
                     ARF_FunSel  = 2'b11;   // SP--
                 end else if (T[4]) begin
                     // Write LOW byte at M[SP] (decremented), SP--
-                    RF_OutASel  = {1'b0, RegSel};
+                    RF_OutASel  = 3'b100;              // S1
                     ALU_FunSel  = 4'b0000; // MOV
                     MuxCSel     = 1'b0;    // low byte
                     ARF_OutDSel = 1'b1;    // SP as address
